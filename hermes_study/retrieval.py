@@ -30,7 +30,21 @@ class Retriever:
         if not rows:
             return []
         k = top_k or self.top_k
-        corpus = [r["text"] for r in rows]
+
+        # Include source metadata in the searchable text. This matters for course
+        # folders where the strongest structure is in names such as "Chapter 1",
+        # "Week 3", "Syllabus", "Homework", or "Professor Slides".
+        corpus = [
+            "\n".join(
+                part for part in (
+                    str(r.get("filename") or ""),
+                    str(r.get("heading") or ""),
+                    str(r.get("source_type") or ""),
+                    str(r.get("text") or ""),
+                ) if part
+            )
+            for r in rows
+        ]
         try:
             matrix = TfidfVectorizer(
                 stop_words="english",
