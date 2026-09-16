@@ -174,6 +174,11 @@ class StudyDB:
             row = con.execute("SELECT * FROM documents WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)
 
+    def get_document(self, document_id: int) -> dict[str, Any] | None:
+        with self.connect() as con:
+            row = con.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
+        return dict(row) if row else None
+
     def list_documents(self, course_id: int) -> list[dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute(
