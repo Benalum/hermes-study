@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+chmod +x scripts/*.sh 2>/dev/null || true
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "Python 3.11+ is required. Install it first (Homebrew: brew install python@3.13)." >&2
@@ -43,4 +44,4 @@ mkdir -p data
 
 echo
 echo "Installed. Next: ./scripts/run_mac.sh"
-echo "For speaker filtering: INSTALL_SPEAKER_GATE=1 ./scripts/install_mac.sh, then set HERMES_STUDY_SPEAKER_GATE=true in .env."
+echo "For speaker filtering: INSTALL_SPEAKER_GATE=1 bash scripts/install_mac.sh, then set HERMES_STUDY_SPEAKER_GATE=true in .env."
