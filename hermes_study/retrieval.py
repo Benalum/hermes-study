@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import numpy as np
@@ -7,6 +8,22 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from .db import StudyDB
+
+
+def _normalize_structure(text: str) -> str:
+    """Expand common course labels so CH1C, Ch 1, and Chapter 1 match."""
+    out = str(text or "")
+    out = re.sub(
+        r"(?i)(?<![a-z0-9])ch(?:apter)?[\s_-]*(\d+)([a-z]?)(?![a-z0-9])",
+        lambda m: f" chapter {m.group(1)} {m.group(2)} ",
+        out,
+    )
+    out = re.sub(
+        r"(?i)(?<![a-z0-9])week[\s_-]*(\d+)(?![a-z0-9])",
+        lambda m: f" week {m.group(1)} ",
+        out,
+    )
+    return out
 
 
 class Retriever:
@@ -35,22 +52,25 @@ class Retriever:
         # folders where the strongest structure is in names such as "Chapter 1",
         # "Week 3", "Syllabus", "Homework", or "Professor Slides".
         corpus = [
-            "\n".join(
-                part for part in (
-                    str(r.get("filename") or ""),
-                    str(r.get("heading") or ""),
-                    str(r.get("source_type") or ""),
-                    str(r.get("text") or ""),
-                ) if part
+            _normalize_structure(
+                "\n".join(
+                    part for part in (
+                        str(r.get("filename") or ""),
+                        str(r.get("heading") or ""),
+                        str(r.get("source_type") or ""),
+                        str(r.get("text") or ""),
+                    ) if part
+                )
             )
             for r in rows
         ]
+        normalized_query = _normalize_structure(query)
         try:
             matrix = TfidfVectorizer(
                 stop_words="english",
                 ngram_range=(1, 2),
                 sublinear_tf=True,
-            ).fit_transform(corpus + [query])
+            ).fit_transform(corpus + [normalized_query])
             sims = cosine_similarity(matrix[-1], matrix[:-1]).ravel()
         except ValueError:
             sims = np.zeros(len(rows))
