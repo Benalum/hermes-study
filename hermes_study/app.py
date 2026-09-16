@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,7 @@ from .config import Settings
 from .db import StudyDB
 from .ingest import AUTHORITY, DocumentIngestor
 from .llm import HermesClient
+from .neural_tts import DEFAULT_VOICE, VOICES, NeuralKokoroTts, NeuralTtsUnavailable
 from .retrieval import Retriever
 from .tutor import Tutor
 from .visuals import VisualUnavailable, render_pdf_page
@@ -42,6 +43,12 @@ class TurnBody(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
 
 
+class TtsBody(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    voice: str = Field(default=DEFAULT_VOICE, max_length=80)
+    speed: float = Field(default=1.0, ge=0.65, le=1.40)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     settings.ensure_dirs()
@@ -57,8 +64,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ingestor = DocumentIngestor(db, settings.upload_dir)
     stt = WhisperSTT(settings.whisper_model)
     gate = SpeakerGate(settings.voice_dir, settings.speaker_threshold)
+    neural_tts = NeuralKokoroTts()
 
-    app = FastAPI(title="Hermes Study", version="0.3.0")
+    app = FastAPI(title="Hermes Study", version="0.4.0")
     app.state.settings = settings
     app.state.db = db
     app.state.llm = llm
@@ -66,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ingestor = ingestor
     app.state.stt = stt
     app.state.speaker_gate = gate
+    app.state.neural_tts = neural_tts
 
     templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -92,8 +101,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "speaker_enrolled": gate.enrolled,
             "research_via_hermes": True,
             "visual_pages": True,
+            "neural_tts": neural_tts.available,
+            "neural_tts_engine": "Kokoro-82M MLX",
             "data_dir": str(settings.data_dir),
         }
+
+    @app.get("/api/tts/voices")
+    async def tts_voices():
+        return {
+            "engine": "Kokoro-82M MLX",
+            "available": neural_tts.available,
+            "default": DEFAULT_VOICE,
+            "voices": list(VOICES),
+        }
+
+    @app.post("/api/tts/speak")
+    async def tts_speak(body: TtsBody):
+        if not neural_tts.available:
+            raise HTTPException(
+                503,
+                "Neural Kokoro TTS is not installed. Run: bash scripts/install_mac.sh",
+            )
+        try:
+            wav = await neural_tts.synthesize_wav(body.text, voice=body.voice, speed=body.speed)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except NeuralTtsUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return Response(
+            content=wav,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/courses")
     async def courses():
