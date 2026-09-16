@@ -54,6 +54,12 @@ class Tutor:
                 "Explain important vocabulary and relationships, use concrete examples, connect ideas as you go, and periodically recap. "
                 "Aim for a substantial audio-friendly lesson rather than a short answer. Do not ask the learner a quiz question at the end unless requested."
             )
+        prompt += (
+            "\nVISUAL CUE: The supplied material is numbered SOURCE 1, SOURCE 2, and so on. "
+            "If your explanation depends on a figure, diagram, graph, table, molecular drawing, or other visual on one of those cited PDF pages, "
+            "briefly tell the learner to look at it and append exactly [SHOW_SOURCE_N], replacing N with that source number. "
+            "Only emit a SHOW_SOURCE marker when seeing the cited page would materially help. Do not invent a visual that is not supported by the source."
+        )
         try:
             answer = await self.llm.chat([
                 {"role": "system", "content": prompt},
@@ -244,7 +250,22 @@ class Tutor:
 
     @staticmethod
     def _source_summaries(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [{"filename": r["filename"], "page": r.get("page"), "type": r["source_type"], "score": round(float(r["score"]), 4)} for r in rows]
+        summaries: list[dict[str, Any]] = []
+        for r in rows:
+            page = r.get("page")
+            document_id = int(r["document_id"])
+            filename = str(r["filename"])
+            item = {
+                "document_id": document_id,
+                "filename": filename,
+                "page": page,
+                "type": r["source_type"],
+                "score": round(float(r["score"]), 4),
+            }
+            if page and filename.lower().endswith(".pdf"):
+                item["visual_url"] = f"/api/documents/{document_id}/pages/{int(page)}.png"
+            summaries.append(item)
+        return summaries
 
     @staticmethod
     def _grounded_system(course: dict[str, Any], sources: list[dict[str, Any]]) -> str:
