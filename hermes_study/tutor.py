@@ -17,10 +17,43 @@ class Tutor:
 
     async def ask(self, course_id: int, question: str) -> dict[str, Any]:
         course = self._course(course_id)
-        sources = await self.retriever.search(course_id, question)
+        scope = _explicit_scope(question)
+        lecture = bool(
+            re.match(
+                r"^\s*(?:hermes\s*[,,:-]?\s*)?(?:teach me|tell me(?: all)? about|walk me through)",
+                question,
+                flags=re.I,
+            )
+        )
+        sources = await self.retriever.search(
+            course_id,
+            question,
+            top_k=10 if lecture else None,
+            scope=scope,
+            strict_scope=bool(scope),
+        )
         if not sources:
-            return {"answer": "I do not have any course material indexed for this class yet. Upload the syllabus, notes, homework, or textbook material first.", "sources": []}
+            if scope:
+                return {
+                    "answer": f"I could not find readable course material explicitly labeled for {scope}.",
+                    "sources": [],
+                }
+            return {
+                "answer": "I do not have any course material indexed for this class yet. Upload the syllabus, notes, homework, or textbook material first.",
+                "sources": [],
+            }
         prompt = self._grounded_system(course, sources)
+        if scope:
+            prompt += (
+                f"\nThe learner explicitly requested {scope}. Treat that as a HARD BOUNDARY. "
+                "Use only the supplied sources from that scope and do not drift into other chapters or weeks."
+            )
+        if lecture:
+            prompt += (
+                "\nThe learner wants a hands-free spoken lesson, not a quiz. Teach the supplied material in a logical order. "
+                "Explain important vocabulary and relationships, use concrete examples, connect ideas as you go, and periodically recap. "
+                "Aim for a substantial audio-friendly lesson rather than a short answer. Do not ask the learner a quiz question at the end unless requested."
+            )
         try:
             answer = await self.llm.chat([
                 {"role": "system", "content": prompt},
@@ -43,8 +76,6 @@ class Tutor:
 
         mastery = self.db.mastery_for_course(course_id)
         if current_focus:
-            # Mastery rows are not chapter-tagged yet. Do not let a weak topic
-            # from another chapter leak into a focused session.
             weak = "Use only weakness evidence supported by the currently scoped sources. Ignore stored weak topics from other chapters."
             retrieval_query = (
                 f"{current_focus} {current_focus} learning objectives concepts examples homework professor material"
@@ -225,6 +256,16 @@ class Tutor:
             "When useful, cite sources in spoken-friendly form such as 'According to syllabus page 3'.\n\n"
             + context_block(sources)
         )
+
+
+def _explicit_scope(text: str) -> str | None:
+    chapter = re.search(r"\bch(?:apter)?\s*[-_ ]*(\d+)\b", text, flags=re.I)
+    if chapter:
+        return f"chapter {chapter.group(1)}"
+    week = re.search(r"\bweek\s*[-_ ]*(\d+)\b", text, flags=re.I)
+    if week:
+        return f"week {week.group(1)}"
+    return None
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
