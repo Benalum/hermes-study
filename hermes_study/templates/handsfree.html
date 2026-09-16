@@ -17,14 +17,14 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
 <main>
   <section class="card">
     <div class="row" style="justify-content:space-between"><h1>Hermes Study — Hands-free</h1><a href="/" style="color:#aac3ff">Desktop UI</a></div>
-    <p class="muted">Phone/headphone mode. The microphone stays open, silence ends your turn, and speaking over Hermes interrupts playback immediately.</p>
+    <p class="muted">Phone/headphone mode. Your Mac generates Hermes's voice locally with neural Kokoro TTS. Speaking over Hermes interrupts playback immediately.</p>
   </section>
 
   <section class="card">
     <label class="muted" for="course">Course</label>
     <select id="course"></select>
     <div class="row" style="margin-top:12px">
-      <label class="switch"><input id="tts" type="checkbox" checked /> Speak replies</label>
+      <label class="switch"><input id="tts" type="checkbox" checked /> Speak replies with neural voice</label>
       <label class="muted" for="sensitivity">Mic sensitivity</label>
       <select id="sensitivity" style="width:auto;min-width:140px">
         <option value="1">Normal</option>
@@ -34,9 +34,9 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
     </div>
     <div class="tts-grid">
       <div class="field">
-        <label class="muted" for="voice">Hermes voice</label>
-        <select id="voice"><option value="">Auto — Best available</option></select>
-        <div id="voiceQuality" class="quality">Loading voices available on this device…</div>
+        <label class="muted" for="voice">Hermes neural voice</label>
+        <select id="voice" disabled><option value="af_heart">Heart — recommended</option></select>
+        <div id="voiceQuality" class="quality">Loading local Kokoro neural voices from the Mac…</div>
       </div>
       <div class="field">
         <label class="muted" for="rate">Speaking speed</label>
@@ -44,7 +44,7 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
           <input id="rate" type="range" min="0.65" max="1.40" step="0.05" value="1.00" />
           <span id="rateValue" class="rate-value">1.00×</span>
         </div>
-        <div class="quality">0.65× slower · 1.00× normal · 1.40× faster</div>
+        <div class="quality">Neural synthesis speed — not browser playback speed.</div>
       </div>
     </div>
   </section>
@@ -74,7 +74,7 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
 let courses=[],selectedCourse=null,sessionId=null,lastBotText='';
 let running=false,stream=null,audioCtx=null,sourceNode=null,processor=null,wakeLock=null;
 let noiseFloor=0.003,inSpeech=false,onset=0,silenceFrames=0,utterance=[],preRoll=[],utteranceStarted=0;
-let audioQueue=[],queueBusy=false,ttsEpoch=0,ttsActive=false,ttsVoices=[];
+let audioQueue=[],queueBusy=false,ttsEpoch=0,ttsActive=false,ttsVoices=[],ttsAbort=null,currentTtsAudio=null,currentTtsUrl=null;
 const VAD={preRollFrames:8,normalOnsetFrames:3,bargeOnsetFrames:6,hangoverFrames:15,minUtteranceMs:260,maxUtteranceMs:30000};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -88,16 +88,18 @@ function addMsg(who,text,sources=[]){const markers=who==='bot'?visualMarkers(tex
 
 function prefGet(key,fallback=''){try{return localStorage.getItem(key)??fallback}catch(_e){return fallback}}
 function prefSet(key,value){try{localStorage.setItem(key,String(value))}catch(_e){}}
-function voiceScore(v){const hay=`${v.name} ${v.voiceURI}`.toLowerCase();let score=0;if(/^en-us\b/i.test(v.lang))score+=45;else if(/^en\b/i.test(v.lang))score+=25;if(v.default)score+=8;if(v.localService)score+=8;if(/premium/.test(hay))score+=220;if(/enhanced/.test(hay))score+=180;if(/natural/.test(hay))score+=150;if(/siri/.test(hay))score+=135;if(/compact/.test(hay))score-=70;if(/ava/.test(hay))score+=55;if(/samantha/.test(hay))score+=50;if(/zoe/.test(hay))score+=42;if(/allison/.test(hay))score+=36;if(/susan/.test(hay))score+=28;if(/tom/.test(hay))score+=24;return score}
-function bestVoice(){const english=ttsVoices.filter(v=>/^en(?:-|$)/i.test(v.lang));const pool=english.length?english:ttsVoices;return [...pool].sort((a,b)=>voiceScore(b)-voiceScore(a)||a.name.localeCompare(b.name))[0]||null}
-function selectedVoice(){const wanted=$('#voice').value;if(wanted){const exact=ttsVoices.find(v=>v.voiceURI===wanted);if(exact)return exact}return bestVoice()}
-function populateVoices(){if(!('speechSynthesis'in window)){$('#voiceQuality').textContent='Text-to-speech is unavailable in this browser.';return}ttsVoices=speechSynthesis.getVoices()||[];const voiceSel=$('#voice');const saved=prefGet('hermesStudyVoice','');const current=voiceSel.value||saved;const english=ttsVoices.filter(v=>/^en(?:-|$)/i.test(v.lang)).sort((a,b)=>voiceScore(b)-voiceScore(a)||a.name.localeCompare(b.name));const recommended=bestVoice();voiceSel.innerHTML='';const auto=document.createElement('option');auto.value='';auto.textContent=`Auto — Best available${recommended?' ('+recommended.name+')':''}`;voiceSel.appendChild(auto);for(const v of english){const o=document.createElement('option');o.value=v.voiceURI;o.textContent=`${v===recommended?'★ ':''}${v.name} — ${v.lang}`;voiceSel.appendChild(o)}if(current&&english.some(v=>v.voiceURI===current))voiceSel.value=current;else voiceSel.value='';const active=selectedVoice();if(active){const hay=`${active.name} ${active.voiceURI}`.toLowerCase();let tier='Best available on this device';if(/premium/.test(hay))tier='Premium voice';else if(/enhanced/.test(hay))tier='Enhanced voice';else if(/natural/.test(hay)||/siri/.test(hay))tier='Natural/high-quality voice';$('#voiceQuality').textContent=`${tier}: ${active.name} (${active.lang})`;}else{$('#voiceQuality').textContent='No English speech voices were reported by this browser.'}}
 function speechRate(){const n=Number($('#rate').value);return Number.isFinite(n)?Math.min(1.4,Math.max(0.65,n)):1}
-function loadTtsPrefs(){const savedRate=Number(prefGet('hermesStudyRate','1'));const rate=Number.isFinite(savedRate)?Math.min(1.4,Math.max(0.65,savedRate)):1;$('#rate').value=rate.toFixed(2);$('#rateValue').textContent=rate.toFixed(2)+'×';$('#voice').value=prefGet('hermesStudyVoice','')}
+function selectedVoiceId(){return $('#voice').value||'af_heart'}
+function selectedVoiceName(){const id=selectedVoiceId();return ttsVoices.find(v=>v.id===id)?.name||id}
+function loadTtsPrefs(){const savedRate=Number(prefGet('hermesStudyNeuralRate','1'));const rate=Number.isFinite(savedRate)?Math.min(1.4,Math.max(0.65,savedRate)):1;$('#rate').value=rate.toFixed(2);$('#rateValue').textContent=rate.toFixed(2)+'×'}
+async function loadNeuralVoices(){try{const data=await api('/api/tts/voices');ttsVoices=data.voices||[];const sel=$('#voice');sel.innerHTML='';for(const v of ttsVoices){const o=document.createElement('option');o.value=v.id;o.textContent=`${v.recommended?'★ ':''}${v.name} — ${v.description}`;sel.appendChild(o)}const saved=prefGet('hermesStudyNeuralVoice',data.default||'af_heart');sel.value=ttsVoices.some(v=>v.id===saved)?saved:(data.default||'af_heart');sel.disabled=!data.available;if(data.available){$('#voiceQuality').textContent=`${data.engine} · generated locally on your Mac · no Safari/system voices`;}else{$('#voiceQuality').textContent='Neural TTS is not installed yet. Run bash scripts/install_mac.sh on the Mac.'}}catch(e){$('#voice').disabled=true;$('#voiceQuality').textContent='Could not load neural voices: '+e.message}}
 
-function speechChunks(text){const clean=String(text||'').replace(/\s+/g,' ').trim();if(!clean)return[];const sentences=clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[clean];const out=[];let cur='';for(const raw of sentences){const s=raw.trim();if(!s)continue;if((cur+' '+s).trim().length>420&&cur){out.push(cur);cur=s}else{cur=(cur+' '+s).trim()}}if(cur)out.push(cur);return out}
-function cancelSpeech(interrupted=false){ttsEpoch++;ttsActive=false;if('speechSynthesis'in window)speechSynthesis.cancel();if(interrupted&&running)setState('hearing','Interrupted — listening','Finish your thought and pause; I will answer automatically.')}
-function speak(text){if(!$('#tts').checked||!('speechSynthesis'in window))return;cancelSpeech(false);const parts=speechChunks(text);if(!parts.length)return;const epoch=++ttsEpoch;const voice=selectedVoice();const rate=speechRate();ttsActive=true;setState('speaking','Hermes speaking',`Voice: ${voice?.name||'system default'} · ${rate.toFixed(2)}× · talk to interrupt.`);let i=0;const next=()=>{if(epoch!==ttsEpoch)return;if(i>=parts.length){ttsActive=false;if(running)setState('listening','Listening','Speak whenever you want.');return}const u=new SpeechSynthesisUtterance(parts[i++]);if(voice){u.voice=voice;u.lang=voice.lang||'en-US'}else{u.lang='en-US'}u.rate=rate;u.pitch=1;u.volume=1;u.onend=next;u.onerror=()=>{if(epoch===ttsEpoch){ttsActive=false;if(running)setState('listening','Listening','Speech playback stopped.')}};speechSynthesis.speak(u)};next()}
+function speechChunks(text){const clean=String(text||'').replace(/\s+/g,' ').trim();if(!clean)return[];const sentences=clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[clean];const out=[];let cur='';for(const raw of sentences){const s=raw.trim();if(!s)continue;if((cur+' '+s).trim().length>360&&cur){out.push(cur);cur=s}else{cur=(cur+' '+s).trim()}}if(cur)out.push(cur);return out}
+function releaseCurrentAudio(){if(currentTtsAudio){try{currentTtsAudio.pause();currentTtsAudio.removeAttribute('src');currentTtsAudio.load()}catch(_e){}currentTtsAudio=null}if(currentTtsUrl){try{URL.revokeObjectURL(currentTtsUrl)}catch(_e){}currentTtsUrl=null}}
+function cancelSpeech(interrupted=false){ttsEpoch++;ttsActive=false;if(ttsAbort){try{ttsAbort.abort()}catch(_e){}ttsAbort=null}releaseCurrentAudio();if(interrupted&&running)setState('hearing','Interrupted — listening','Finish your thought and pause; I will answer automatically.')}
+async function synthesizeChunk(text,voice,speed,epoch){const controller=new AbortController();ttsAbort=controller;const r=await fetch('/api/tts/speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,voice,speed}),signal:controller.signal});if(epoch!==ttsEpoch)throw new DOMException('Speech cancelled','AbortError');if(!r.ok){let detail='Neural TTS failed';try{const body=await r.json();detail=typeof body.detail==='string'?body.detail:JSON.stringify(body.detail)}catch(_e){detail=await r.text()||detail}throw new Error(detail)}return r.blob()}
+function playBlob(blob,epoch){return new Promise((resolve,reject)=>{if(epoch!==ttsEpoch){reject(new DOMException('Speech cancelled','AbortError'));return}currentTtsUrl=URL.createObjectURL(blob);const audio=new Audio(currentTtsUrl);currentTtsAudio=audio;audio.preload='auto';audio.onended=()=>{releaseCurrentAudio();resolve()};audio.onerror=()=>{releaseCurrentAudio();reject(new Error('Phone could not play the neural speech audio.'))};const p=audio.play();if(p&&typeof p.catch==='function')p.catch(err=>{releaseCurrentAudio();reject(err)})})}
+async function speak(text){if(!$('#tts').checked)return;cancelSpeech(false);const parts=speechChunks(text);if(!parts.length)return;const epoch=++ttsEpoch;const voice=selectedVoiceId();const rate=speechRate();ttsActive=true;setState('speaking','Hermes speaking',`Neural voice: ${selectedVoiceName()} · ${rate.toFixed(2)}× · talk to interrupt.`);try{for(const part of parts){if(epoch!==ttsEpoch)return;const blob=await synthesizeChunk(part,voice,rate,epoch);ttsAbort=null;if(epoch!==ttsEpoch)return;await playBlob(blob,epoch)}if(epoch===ttsEpoch){ttsActive=false;if(running)setState('listening','Listening','Speak whenever you want.')}}catch(e){if(e?.name==='AbortError'||epoch!==ttsEpoch)return;ttsActive=false;releaseCurrentAudio();addMsg('bot','Neural voice error: '+e.message);if(running)setState('listening','Listening','Speech playback stopped; microphone is still active.')}}
 
 async function loadCourses(){courses=await api('/api/courses');const sel=$('#course');sel.innerHTML='';for(const c of courses){const o=document.createElement('option');o.value=String(c.id);o.textContent=`${c.name}${c.code?' — '+c.code:''}`;sel.appendChild(o)}if(courses.length){selectedCourse=courses[0];sel.value=String(selectedCourse.id)}else{setState('','No courses','Create a course in the main Hermes Study page first.')}sel.onchange=()=>{selectedCourse=courses.find(c=>String(c.id)===sel.value)||null;sessionId=null}}
 
@@ -132,10 +134,10 @@ async function stopHandsFree(){running=false;cancelSpeech(false);if(processor){p
 
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running&&!wakeLock)requestWake()});
 $('#start').onclick=startHandsFree;$('#stop').onclick=stopHandsFree;$('#repeat').onclick=()=>{if(lastBotText)speak(lastBotText)};$('#silence').onclick=()=>cancelSpeech(false);$('#send').onclick=()=>{const t=$('#text').value;$('#text').value='';handleText(t)};$('#text').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')$('#send').click()};
-$('#voice').onchange=()=>{prefSet('hermesStudyVoice',$('#voice').value);populateVoices()};
-$('#rate').oninput=()=>{const rate=speechRate();$('#rateValue').textContent=rate.toFixed(2)+'×';prefSet('hermesStudyRate',rate.toFixed(2))};
+$('#voice').onchange=()=>prefSet('hermesStudyNeuralVoice',$('#voice').value);
+$('#rate').oninput=()=>{const rate=speechRate();$('#rateValue').textContent=rate.toFixed(2)+'×';prefSet('hermesStudyNeuralRate',rate.toFixed(2))};
 loadTtsPrefs();
-if('speechSynthesis'in window){speechSynthesis.onvoiceschanged=populateVoices;populateVoices();setTimeout(populateVoices,250);setTimeout(populateVoices,1000)}
+loadNeuralVoices();
 loadCourses().catch(e=>addMsg('bot',e.message));
 </script>
 </body>
