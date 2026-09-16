@@ -9,7 +9,6 @@ from docx import Document
 from pypdf import PdfReader
 
 from .db import StudyDB
-from .llm import OllamaClient
 
 AUTHORITY = {
     "professor": 100,
@@ -64,10 +63,12 @@ def extract_sections(path: Path) -> list[dict[str, Any]]:
 
 
 class DocumentIngestor:
-    def __init__(self, db: StudyDB, llm: OllamaClient, upload_dir: Path):
+    def __init__(self, db: StudyDB, llm_or_upload_dir, upload_dir: Path | None = None):
         self.db = db
-        self.llm = llm
-        self.upload_dir = Path(upload_dir)
+        # v0.1 accepted (db, llm, upload_dir). The LLM is no longer needed
+        # for ingestion, but we keep that signature compatible for upgrades/tests.
+        chosen = llm_or_upload_dir if upload_dir is None else upload_dir
+        self.upload_dir = Path(chosen)
 
     async def ingest(self, course_id: int, source_path: Path, source_type: str = "other") -> dict[str, Any]:
         source_path = Path(source_path)
@@ -98,11 +99,5 @@ class DocumentIngestor:
                 raw_chunks.append({"page": section.get("page"), "text": text, "heading": ""})
         if not raw_chunks:
             raise ValueError("No readable text was extracted from the document.")
-        try:
-            embeddings = await self.llm.embed([c["text"] for c in raw_chunks])
-            for ch, emb in zip(raw_chunks, embeddings, strict=False):
-                ch["embedding"] = emb
-        except Exception:
-            pass
         self.db.replace_chunks(doc["id"], course_id, raw_chunks)
         return next(d for d in self.db.list_documents(course_id) if d["id"] == doc["id"])

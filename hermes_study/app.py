@@ -12,11 +12,10 @@ from pydantic import BaseModel, Field
 from .config import Settings
 from .db import StudyDB
 from .ingest import AUTHORITY, DocumentIngestor
-from .llm import OllamaClient
+from .llm import HermesClient
 from .retrieval import Retriever
 from .tutor import Tutor
 from .voice import SpeakerGate, VoiceUnavailable, WhisperSTT, save_upload_bytes
-from .websearch import OllamaWebSearch
 
 
 class CourseCreate(BaseModel):
@@ -46,15 +45,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     settings.ensure_dirs()
     db = StudyDB(settings.db_path)
-    llm = OllamaClient(settings.ollama_base_url, settings.chat_model, settings.embed_model)
-    retriever = Retriever(db, llm, settings.top_k)
+    llm = HermesClient(
+        settings.hermes_base_url,
+        settings.hermes_api_key,
+        settings.hermes_model,
+        settings.hermes_session_key,
+    )
+    retriever = Retriever(db, settings.top_k)
     tutor = Tutor(db, llm, retriever)
-    ingestor = DocumentIngestor(db, llm, settings.upload_dir)
+    ingestor = DocumentIngestor(db, settings.upload_dir)
     stt = WhisperSTT(settings.whisper_model)
     gate = SpeakerGate(settings.voice_dir, settings.speaker_threshold)
-    web_search = OllamaWebSearch(settings.ollama_api_key)
 
-    app = FastAPI(title="Hermes Study", version="0.1.0")
+    app = FastAPI(title="Hermes Study", version="0.2.0")
     app.state.settings = settings
     app.state.db = db
     app.state.llm = llm
@@ -62,7 +65,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ingestor = ingestor
     app.state.stt = stt
     app.state.speaker_gate = gate
-    app.state.web_search = web_search
 
     templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -75,10 +77,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         llm_status = await llm.health()
         return {
             "ok": True,
+            "hermes": llm_status,
             "ollama": llm_status,
             "speaker_gate_enabled": settings.speaker_gate,
             "speaker_enrolled": gate.enrolled,
-            "web_search_enabled": web_search.enabled,
+            "research_via_hermes": True,
             "data_dir": str(settings.data_dir),
         }
 
@@ -187,9 +190,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/research")
     async def research(q: str):
-        if not web_search.enabled:
-            raise HTTPException(503, "External web research is disabled. Set OLLAMA_API_KEY to enable it.")
-        return {"results": await web_search.search(q)}
+        if not q.strip():
+            raise HTTPException(400, "q is required")
+        try:
+            return {"answer": await llm.research(q.strip())}
+        except Exception as exc:
+            raise HTTPException(503, f"Hermes research is unavailable: {exc}") from exc
 
     return app
 
