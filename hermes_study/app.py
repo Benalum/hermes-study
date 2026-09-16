@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ from .ingest import AUTHORITY, DocumentIngestor
 from .llm import HermesClient
 from .retrieval import Retriever
 from .tutor import Tutor
+from .visuals import VisualUnavailable, render_pdf_page
 from .voice import SpeakerGate, VoiceUnavailable, WhisperSTT, save_upload_bytes
 
 
@@ -57,7 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     stt = WhisperSTT(settings.whisper_model)
     gate = SpeakerGate(settings.voice_dir, settings.speaker_threshold)
 
-    app = FastAPI(title="Hermes Study", version="0.2.0")
+    app = FastAPI(title="Hermes Study", version="0.3.0")
     app.state.settings = settings
     app.state.db = db
     app.state.llm = llm
@@ -90,6 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "speaker_gate_enabled": settings.speaker_gate,
             "speaker_enrolled": gate.enrolled,
             "research_via_hermes": True,
+            "visual_pages": True,
             "data_dir": str(settings.data_dir),
         }
 
@@ -116,6 +118,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "documents": db.list_documents(course_id),
             "mastery": db.mastery_for_course(course_id),
         }
+
+    @app.get("/api/documents/{document_id}/pages/{page_number}.png")
+    async def document_page_image(document_id: int, page_number: int):
+        document = db.get_document(document_id)
+        if not document:
+            raise HTTPException(404, "Document not found")
+        try:
+            image_path = render_pdf_page(
+                Path(document["stored_path"]),
+                page_number,
+                settings.data_dir / "visual-cache",
+                cache_key=f"{document['sha256'][:16]}-{document_id}",
+            )
+        except VisualUnavailable as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(
+            image_path,
+            media_type="image/png",
+            filename=f"{Path(document['filename']).stem}-page-{page_number}.png",
+            headers={"Cache-Control": "private, max-age=86400"},
+        )
 
     @app.post("/api/courses/{course_id}/documents")
     async def upload_document(
