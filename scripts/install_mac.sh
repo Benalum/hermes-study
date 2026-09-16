@@ -103,7 +103,7 @@ rm -rf .venv
 "$PYTHON_BIN" -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[voice]'
+python -m pip install -e '.[voice,neural-tts]'
 
 if [[ "${INSTALL_SPEAKER_GATE:-0}" == "1" ]]; then
   echo "Installing optional SpeechBrain speaker verification..."
@@ -154,5 +154,5 @@ fi
 
 echo
 echo "Installed. Next: ./scripts/run_mac.sh"
-echo "No hermes-voice or Ollama installation is required."
+echo "Neural Kokoro TTS is installed locally for the hands-free page; browser/system voices are not required."
 echo "For speaker filtering later: INSTALL_SPEAKER_GATE=1 bash scripts/install_mac.sh"
