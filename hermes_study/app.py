@@ -72,6 +72,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def index(request: Request):
         return templates.TemplateResponse(request=request, name="index.html", context={"title": "Hermes Study"})
 
+    @app.get("/handsfree", response_class=HTMLResponse)
+    async def handsfree(request: Request):
+        return templates.TemplateResponse(
+            request=request,
+            name="handsfree.html",
+            context={"title": "Hermes Study Hands-free"},
+        )
+
     @app.get("/api/health")
     async def health():
         llm_status = await llm.health()
