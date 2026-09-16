@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS courses (
     description TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS course_settings (
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(course_id, key)
+);
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -128,6 +135,29 @@ class StudyDB:
             if q in hay or hay in q:
                 return c
         return None
+
+    def set_course_setting(self, course_id: int, key: str, value: str) -> None:
+        value = value.strip()
+        with self.connect() as con:
+            if value:
+                con.execute(
+                    "INSERT INTO course_settings(course_id,key,value,updated_at) VALUES(?,?,?,?) "
+                    "ON CONFLICT(course_id,key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (course_id, key, value, utcnow()),
+                )
+            else:
+                con.execute(
+                    "DELETE FROM course_settings WHERE course_id=? AND key=?",
+                    (course_id, key),
+                )
+
+    def get_course_setting(self, course_id: int, key: str, default: str = "") -> str:
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT value FROM course_settings WHERE course_id=? AND key=?",
+                (course_id, key),
+            ).fetchone()
+        return str(row["value"]) if row else default
 
     def add_document(self, *, course_id: int, filename: str, stored_path: str, source_type: str,
                      authority: int, sha256: str) -> dict[str, Any]:
