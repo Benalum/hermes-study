@@ -65,12 +65,18 @@ def extract_sections(path: Path) -> list[dict[str, Any]]:
 class DocumentIngestor:
     def __init__(self, db: StudyDB, llm_or_upload_dir, upload_dir: Path | None = None):
         self.db = db
-        # v0.1 accepted (db, llm, upload_dir). The LLM is no longer needed
-        # for ingestion, but we keep that signature compatible for upgrades/tests.
         chosen = llm_or_upload_dir if upload_dir is None else upload_dir
         self.upload_dir = Path(chosen)
 
-    async def ingest(self, course_id: int, source_path: Path, source_type: str = "other") -> dict[str, Any]:
+    async def ingest(
+        self,
+        course_id: int,
+        source_path: Path,
+        source_type: str = "other",
+        *,
+        relative_path: str = "",
+        structural_scope: str = "",
+    ) -> dict[str, Any]:
         source_path = Path(source_path)
         if not source_path.exists():
             raise FileNotFoundError(source_path)
@@ -79,12 +85,16 @@ class DocumentIngestor:
         target_dir.mkdir(parents=True, exist_ok=True)
         safe_name = source_path.name.replace("/", "_")
         stored = target_dir / f"{digest[:12]}-{safe_name}"
-        if source_path.resolve() != stored.resolve():
-            shutil.copy2(source_path, stored)
+
+        # Metadata is updated even for files that were indexed previously. This
+        # lets a later folder-organizing pass teach Hermes the course structure
+        # without re-extracting/chunking the document.
         doc = self.db.add_document(
             course_id=course_id,
             filename=source_path.name,
             stored_path=str(stored),
+            relative_path=relative_path,
+            structural_scope=structural_scope,
             source_type=source_type,
             authority=AUTHORITY.get(source_type, AUTHORITY["other"]),
             sha256=digest,
@@ -93,6 +103,10 @@ class DocumentIngestor:
         same = next((d for d in existing if d["id"] == doc["id"]), None)
         if same and int(same["chunk_count"]) > 0:
             return same
+
+        if source_path.resolve() != stored.resolve():
+            shutil.copy2(source_path, stored)
+
         raw_chunks: list[dict[str, Any]] = []
         for section in extract_sections(stored):
             for text in chunk_text(section["text"]):
