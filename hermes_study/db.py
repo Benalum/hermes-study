@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS documents (
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     stored_path TEXT NOT NULL,
+    relative_path TEXT NOT NULL DEFAULT '',
+    structural_scope TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL,
     authority INTEGER NOT NULL DEFAULT 60,
     sha256 TEXT NOT NULL,
@@ -92,6 +94,16 @@ class StudyDB:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as con:
             con.executescript(SCHEMA)
+            self._migrate(con)
+
+    @staticmethod
+    def _migrate(con: sqlite3.Connection) -> None:
+        """Apply small additive schema migrations for existing local databases."""
+        columns = {str(row[1]) for row in con.execute("PRAGMA table_info(documents)").fetchall()}
+        if "relative_path" not in columns:
+            con.execute("ALTER TABLE documents ADD COLUMN relative_path TEXT NOT NULL DEFAULT ''")
+        if "structural_scope" not in columns:
+            con.execute("ALTER TABLE documents ADD COLUMN structural_scope TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -159,17 +171,50 @@ class StudyDB:
             ).fetchone()
         return str(row["value"]) if row else default
 
-    def add_document(self, *, course_id: int, filename: str, stored_path: str, source_type: str,
-                     authority: int, sha256: str) -> dict[str, Any]:
+    def add_document(
+        self,
+        *,
+        course_id: int,
+        filename: str,
+        stored_path: str,
+        source_type: str,
+        authority: int,
+        sha256: str,
+        relative_path: str = "",
+        structural_scope: str = "",
+    ) -> dict[str, Any]:
         with self.connect() as con:
             existing = con.execute(
                 "SELECT * FROM documents WHERE course_id=? AND sha256=?", (course_id, sha256)
             ).fetchone()
             if existing:
-                return dict(existing)
+                con.execute(
+                    "UPDATE documents SET filename=?, source_type=?, authority=?, relative_path=?, structural_scope=? WHERE id=?",
+                    (
+                        filename,
+                        source_type,
+                        authority,
+                        relative_path.strip(),
+                        structural_scope.strip(),
+                        existing["id"],
+                    ),
+                )
+                row = con.execute("SELECT * FROM documents WHERE id=?", (existing["id"],)).fetchone()
+                return dict(row)
             cur = con.execute(
-                "INSERT INTO documents(course_id,filename,stored_path,source_type,authority,sha256,created_at) VALUES(?,?,?,?,?,?,?)",
-                (course_id, filename, stored_path, source_type, authority, sha256, utcnow()),
+                "INSERT INTO documents(course_id,filename,stored_path,relative_path,structural_scope,source_type,authority,sha256,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (
+                    course_id,
+                    filename,
+                    stored_path,
+                    relative_path.strip(),
+                    structural_scope.strip(),
+                    source_type,
+                    authority,
+                    sha256,
+                    utcnow(),
+                ),
             )
             row = con.execute("SELECT * FROM documents WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)
@@ -201,8 +246,9 @@ class StudyDB:
     def chunks_for_course(self, course_id: int) -> list[dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute(
-                "SELECT c.*, d.filename, d.source_type, d.authority FROM chunks c JOIN documents d ON d.id=c.document_id "
-                "WHERE c.course_id=?", (course_id,)
+                "SELECT c.*, d.filename, d.relative_path, d.structural_scope, d.source_type, d.authority "
+                "FROM chunks c JOIN documents d ON d.id=c.document_id WHERE c.course_id=?",
+                (course_id,),
             ).fetchall()
         out = []
         for row in rows:
