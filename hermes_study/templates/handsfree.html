@@ -8,8 +8,9 @@
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color-scheme:dark;background:#09101d;color:#eef2f8}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(160deg,#09101d,#111d34);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 main{max-width:760px;margin:auto;padding:16px;display:grid;gap:14px}.card{background:#111a2c;border:1px solid #2b3a59;border-radius:18px;padding:16px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}button,select,textarea{font:inherit;color:inherit;background:#0c1526;border:1px solid #3a4d70;border-radius:12px;padding:12px;min-height:46px}button{background:#29467e;font-weight:700;cursor:pointer}button.stop{background:#6b2633}button.secondary{background:#18243a}button:disabled{opacity:.55;cursor:not-allowed}select,textarea{width:100%}
-.status{display:flex;align-items:center;gap:12px}.orb{width:18px;height:18px;border-radius:50%;background:#68758a}.orb.listening{background:#55c985;box-shadow:0 0 0 7px #55c98520}.orb.hearing{background:#ffd36a;box-shadow:0 0 0 9px #ffd36a22}.orb.processing{background:#8ca8ff;box-shadow:0 0 0 7px #8ca8ff20}.orb.speaking{background:#c193ff;box-shadow:0 0 0 7px #c193ff20}.status strong{font-size:19px}.chat{display:grid;gap:10px;max-height:46vh;overflow:auto;padding:3px}.msg{padding:12px 14px;border-radius:14px;line-height:1.4;white-space:pre-wrap}.user{background:#29467e;margin-left:12%}.bot{background:#1a2943;margin-right:8%}.sources{font-size:11px;color:#9cabca;margin-top:8px}.sources a{color:#b9caff}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}.switch{display:flex;align-items:center;gap:8px}.switch input{width:20px;height:20px}.hint{border-left:3px solid #5875a8;padding-left:10px}.meter{height:7px;background:#07101f;border-radius:99px;overflow:hidden}.meter>div{height:100%;width:0%;background:#8ca8ff;transition:width .08s linear}.visuals{display:grid;gap:10px;margin-top:12px}.visual-card{background:#0b1425;border:1px solid #40557c;border-radius:14px;overflow:hidden}.visual-card img{display:block;width:100%;height:auto;background:white}.visual-caption{padding:9px 10px;font-size:12px;color:#bdc9dc;display:flex;justify-content:space-between;gap:10px;align-items:center}.visual-caption a{color:#b8c9ff;white-space:nowrap}@media(max-width:520px){main{padding:12px}.card{padding:14px}.controls{grid-template-columns:1fr}.full{grid-column:auto}.chat{max-height:42vh}}
+h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}button,select,textarea,input{font:inherit;color:inherit}button,select,textarea{background:#0c1526;border:1px solid #3a4d70;border-radius:12px;padding:12px;min-height:46px}button{background:#29467e;font-weight:700;cursor:pointer}button.stop{background:#6b2633}button.secondary{background:#18243a}button:disabled{opacity:.55;cursor:not-allowed}select,textarea{width:100%}
+.status{display:flex;align-items:center;gap:12px}.orb{width:18px;height:18px;border-radius:50%;background:#68758a}.orb.listening{background:#55c985;box-shadow:0 0 0 7px #55c98520}.orb.hearing{background:#ffd36a;box-shadow:0 0 0 9px #ffd36a22}.orb.processing{background:#8ca8ff;box-shadow:0 0 0 7px #8ca8ff20}.orb.speaking{background:#c193ff;box-shadow:0 0 0 7px #c193ff20}.status strong{font-size:19px}.chat{display:grid;gap:10px;max-height:46vh;overflow:auto;padding:3px}.msg{padding:12px 14px;border-radius:14px;line-height:1.4;white-space:pre-wrap}.user{background:#29467e;margin-left:12%}.bot{background:#1a2943;margin-right:8%}.sources{font-size:11px;color:#9cabca;margin-top:8px}.sources a{color:#b9caff}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}.switch{display:flex;align-items:center;gap:8px}.switch input{width:20px;height:20px}.hint{border-left:3px solid #5875a8;padding-left:10px}.meter{height:7px;background:#07101f;border-radius:99px;overflow:hidden}.meter>div{height:100%;width:0%;background:#8ca8ff;transition:width .08s linear}.visuals{display:grid;gap:10px;margin-top:12px}.visual-card{background:#0b1425;border:1px solid #40557c;border-radius:14px;overflow:hidden}.visual-card img{display:block;width:100%;height:auto;background:white}.visual-caption{padding:9px 10px;font-size:12px;color:#bdc9dc;display:flex;justify-content:space-between;gap:10px;align-items:center}.visual-caption a{color:#b8c9ff;white-space:nowrap}.tts-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(150px,1fr);gap:12px;margin-top:12px}.field{display:grid;gap:6px}.rate-row{display:flex;align-items:center;gap:10px}.rate-row input[type=range]{width:100%;accent-color:#8ca8ff}.rate-value{min-width:52px;text-align:right;font-variant-numeric:tabular-nums;color:#d7e0f0}.quality{margin-top:6px;color:#9eabc1;font-size:12px}
+@media(max-width:520px){main{padding:12px}.card{padding:14px}.controls,.tts-grid{grid-template-columns:1fr}.full{grid-column:auto}.chat{max-height:42vh}}
 </style>
 </head>
 <body>
@@ -24,12 +25,27 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
     <select id="course"></select>
     <div class="row" style="margin-top:12px">
       <label class="switch"><input id="tts" type="checkbox" checked /> Speak replies</label>
-      <label class="muted" for="sensitivity">Sensitivity</label>
+      <label class="muted" for="sensitivity">Mic sensitivity</label>
       <select id="sensitivity" style="width:auto;min-width:140px">
         <option value="1">Normal</option>
         <option value="0.75">High</option>
         <option value="1.35">Low / noisy room</option>
       </select>
+    </div>
+    <div class="tts-grid">
+      <div class="field">
+        <label class="muted" for="voice">Hermes voice</label>
+        <select id="voice"><option value="">Auto — Best available</option></select>
+        <div id="voiceQuality" class="quality">Loading voices available on this device…</div>
+      </div>
+      <div class="field">
+        <label class="muted" for="rate">Speaking speed</label>
+        <div class="rate-row">
+          <input id="rate" type="range" min="0.65" max="1.40" step="0.05" value="1.00" />
+          <span id="rateValue" class="rate-value">1.00×</span>
+        </div>
+        <div class="quality">0.65× slower · 1.00× normal · 1.40× faster</div>
+      </div>
     </div>
   </section>
 
@@ -58,7 +74,7 @@ h1{font-size:22px;margin:0}.muted{color:#9eabc1;font-size:13px;line-height:1.4}b
 let courses=[],selectedCourse=null,sessionId=null,lastBotText='';
 let running=false,stream=null,audioCtx=null,sourceNode=null,processor=null,wakeLock=null;
 let noiseFloor=0.003,inSpeech=false,onset=0,silenceFrames=0,utterance=[],preRoll=[],utteranceStarted=0;
-let audioQueue=[],queueBusy=false,ttsEpoch=0,ttsActive=false;
+let audioQueue=[],queueBusy=false,ttsEpoch=0,ttsActive=false,ttsVoices=[];
 const VAD={preRollFrames:8,normalOnsetFrames:3,bargeOnsetFrames:6,hangoverFrames:15,minUtteranceMs:260,maxUtteranceMs:30000};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -70,9 +86,18 @@ function cleanReply(text){return String(text||'').replace(/\s*\[SHOW_SOURCE_\d+\
 function addVisualCards(parent,markerIndexes,sources){if(!markerIndexes.length||!sources?.length)return;const wrap=document.createElement('div');wrap.className='visuals';for(const n of markerIndexes){const s=sources[n-1];if(!s?.visual_url)continue;const card=document.createElement('div');card.className='visual-card';const link=document.createElement('a');link.href=s.visual_url;link.target='_blank';link.rel='noopener';const img=document.createElement('img');img.src=s.visual_url;img.alt=`Referenced page ${s.page||''} from ${s.filename||'course material'}`;img.loading='eager';link.appendChild(img);card.appendChild(link);const cap=document.createElement('div');cap.className='visual-caption';const label=document.createElement('span');label.textContent=`${s.filename}${s.page?' — page '+s.page:''}`;const open=document.createElement('a');open.href=s.visual_url;open.target='_blank';open.rel='noopener';open.textContent='Open page';cap.append(label,open);card.appendChild(cap);wrap.appendChild(card)}if(wrap.children.length)parent.appendChild(wrap)}
 function addMsg(who,text,sources=[]){const markers=who==='bot'?visualMarkers(text):[];const visibleText=who==='bot'?cleanReply(text):String(text??'');const d=document.createElement('div');d.className='msg '+(who==='user'?'user':'bot');d.innerHTML=esc(visibleText);if(sources?.length)d.innerHTML+=`<div class="sources">${sources.map(s=>s.visual_url?`<a href="${esc(s.visual_url)}" target="_blank" rel="noopener">${esc(s.filename)+(s.page?' p.'+s.page:'')}</a>`:esc(s.filename)+(s.page?' p.'+s.page:'')).join(' • ')}</div>`;addVisualCards(d,markers,sources);$('#chat').appendChild(d);$('#chat').scrollTop=$('#chat').scrollHeight;if(who==='bot'){lastBotText=visibleText;speak(visibleText)}}
 
+function prefGet(key,fallback=''){try{return localStorage.getItem(key)??fallback}catch(_e){return fallback}}
+function prefSet(key,value){try{localStorage.setItem(key,String(value))}catch(_e){}}
+function voiceScore(v){const hay=`${v.name} ${v.voiceURI}`.toLowerCase();let score=0;if(/^en-us\b/i.test(v.lang))score+=45;else if(/^en\b/i.test(v.lang))score+=25;if(v.default)score+=8;if(v.localService)score+=8;if(/premium/.test(hay))score+=220;if(/enhanced/.test(hay))score+=180;if(/natural/.test(hay))score+=150;if(/siri/.test(hay))score+=135;if(/compact/.test(hay))score-=70;if(/ava/.test(hay))score+=55;if(/samantha/.test(hay))score+=50;if(/zoe/.test(hay))score+=42;if(/allison/.test(hay))score+=36;if(/susan/.test(hay))score+=28;if(/tom/.test(hay))score+=24;return score}
+function bestVoice(){const english=ttsVoices.filter(v=>/^en(?:-|$)/i.test(v.lang));const pool=english.length?english:ttsVoices;return [...pool].sort((a,b)=>voiceScore(b)-voiceScore(a)||a.name.localeCompare(b.name))[0]||null}
+function selectedVoice(){const wanted=$('#voice').value;if(wanted){const exact=ttsVoices.find(v=>v.voiceURI===wanted);if(exact)return exact}return bestVoice()}
+function populateVoices(){if(!('speechSynthesis'in window)){$('#voiceQuality').textContent='Text-to-speech is unavailable in this browser.';return}ttsVoices=speechSynthesis.getVoices()||[];const voiceSel=$('#voice');const saved=prefGet('hermesStudyVoice','');const current=voiceSel.value||saved;const english=ttsVoices.filter(v=>/^en(?:-|$)/i.test(v.lang)).sort((a,b)=>voiceScore(b)-voiceScore(a)||a.name.localeCompare(b.name));const recommended=bestVoice();voiceSel.innerHTML='';const auto=document.createElement('option');auto.value='';auto.textContent=`Auto — Best available${recommended?' ('+recommended.name+')':''}`;voiceSel.appendChild(auto);for(const v of english){const o=document.createElement('option');o.value=v.voiceURI;o.textContent=`${v===recommended?'★ ':''}${v.name} — ${v.lang}`;voiceSel.appendChild(o)}if(current&&english.some(v=>v.voiceURI===current))voiceSel.value=current;else voiceSel.value='';const active=selectedVoice();if(active){const hay=`${active.name} ${active.voiceURI}`.toLowerCase();let tier='Best available on this device';if(/premium/.test(hay))tier='Premium voice';else if(/enhanced/.test(hay))tier='Enhanced voice';else if(/natural/.test(hay)||/siri/.test(hay))tier='Natural/high-quality voice';$('#voiceQuality').textContent=`${tier}: ${active.name} (${active.lang})`;}else{$('#voiceQuality').textContent='No English speech voices were reported by this browser.'}}
+function speechRate(){const n=Number($('#rate').value);return Number.isFinite(n)?Math.min(1.4,Math.max(0.65,n)):1}
+function loadTtsPrefs(){const savedRate=Number(prefGet('hermesStudyRate','1'));const rate=Number.isFinite(savedRate)?Math.min(1.4,Math.max(0.65,savedRate)):1;$('#rate').value=rate.toFixed(2);$('#rateValue').textContent=rate.toFixed(2)+'×';$('#voice').value=prefGet('hermesStudyVoice','')}
+
 function speechChunks(text){const clean=String(text||'').replace(/\s+/g,' ').trim();if(!clean)return[];const sentences=clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[clean];const out=[];let cur='';for(const raw of sentences){const s=raw.trim();if(!s)continue;if((cur+' '+s).trim().length>420&&cur){out.push(cur);cur=s}else{cur=(cur+' '+s).trim()}}if(cur)out.push(cur);return out}
 function cancelSpeech(interrupted=false){ttsEpoch++;ttsActive=false;if('speechSynthesis'in window)speechSynthesis.cancel();if(interrupted&&running)setState('hearing','Interrupted — listening','Finish your thought and pause; I will answer automatically.')}
-function speak(text){if(!$('#tts').checked||!('speechSynthesis'in window))return;cancelSpeech(false);const parts=speechChunks(text);if(!parts.length)return;const epoch=++ttsEpoch;ttsActive=true;setState('speaking','Hermes speaking','You can interrupt simply by talking.');let i=0;const next=()=>{if(epoch!==ttsEpoch)return;if(i>=parts.length){ttsActive=false;if(running)setState('listening','Listening','Speak whenever you want.');return}const u=new SpeechSynthesisUtterance(parts[i++]);u.rate=1.02;u.onend=next;u.onerror=()=>{if(epoch===ttsEpoch){ttsActive=false;if(running)setState('listening','Listening','Speech playback stopped.')}};speechSynthesis.speak(u)};next()}
+function speak(text){if(!$('#tts').checked||!('speechSynthesis'in window))return;cancelSpeech(false);const parts=speechChunks(text);if(!parts.length)return;const epoch=++ttsEpoch;const voice=selectedVoice();const rate=speechRate();ttsActive=true;setState('speaking','Hermes speaking',`Voice: ${voice?.name||'system default'} · ${rate.toFixed(2)}× · talk to interrupt.`);let i=0;const next=()=>{if(epoch!==ttsEpoch)return;if(i>=parts.length){ttsActive=false;if(running)setState('listening','Listening','Speak whenever you want.');return}const u=new SpeechSynthesisUtterance(parts[i++]);if(voice){u.voice=voice;u.lang=voice.lang||'en-US'}else{u.lang='en-US'}u.rate=rate;u.pitch=1;u.volume=1;u.onend=next;u.onerror=()=>{if(epoch===ttsEpoch){ttsActive=false;if(running)setState('listening','Listening','Speech playback stopped.')}};speechSynthesis.speak(u)};next()}
 
 async function loadCourses(){courses=await api('/api/courses');const sel=$('#course');sel.innerHTML='';for(const c of courses){const o=document.createElement('option');o.value=String(c.id);o.textContent=`${c.name}${c.code?' — '+c.code:''}`;sel.appendChild(o)}if(courses.length){selectedCourse=courses[0];sel.value=String(selectedCourse.id)}else{setState('','No courses','Create a course in the main Hermes Study page first.')}sel.onchange=()=>{selectedCourse=courses.find(c=>String(c.id)===sel.value)||null;sessionId=null}}
 
@@ -107,6 +132,10 @@ async function stopHandsFree(){running=false;cancelSpeech(false);if(processor){p
 
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running&&!wakeLock)requestWake()});
 $('#start').onclick=startHandsFree;$('#stop').onclick=stopHandsFree;$('#repeat').onclick=()=>{if(lastBotText)speak(lastBotText)};$('#silence').onclick=()=>cancelSpeech(false);$('#send').onclick=()=>{const t=$('#text').value;$('#text').value='';handleText(t)};$('#text').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')$('#send').click()};
+$('#voice').onchange=()=>{prefSet('hermesStudyVoice',$('#voice').value);populateVoices()};
+$('#rate').oninput=()=>{const rate=speechRate();$('#rateValue').textContent=rate.toFixed(2)+'×';prefSet('hermesStudyRate',rate.toFixed(2))};
+loadTtsPrefs();
+if('speechSynthesis'in window){speechSynthesis.onvoiceschanged=populateVoices;populateVoices();setTimeout(populateVoices,250);setTimeout(populateVoices,1000)}
 loadCourses().catch(e=>addMsg('bot',e.message));
 </script>
 </body>
