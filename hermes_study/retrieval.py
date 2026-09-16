@@ -10,12 +10,32 @@ from sklearn.metrics.pairwise import cosine_similarity
 from .db import StudyDB
 
 
+NUMBER_WORDS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "eleven": "11", "twelve": "12", "thirteen": "13", "fourteen": "14",
+    "fifteen": "15", "sixteen": "16", "seventeen": "17", "eighteen": "18",
+    "nineteen": "19", "twenty": "20",
+}
+
+
 def _normalize_structure(text: str) -> str:
-    """Expand common course labels so CH1C, Ch 1, and Chapter 1 match."""
+    """Normalize CH2, Ch 2, Chapter Two, and similar structural labels."""
     out = str(text or "")
+    word_pattern = "|".join(NUMBER_WORDS)
+    out = re.sub(
+        rf"(?i)(?<![a-z0-9])ch(?:apter)?[\s_-]*({word_pattern})(?![a-z0-9])",
+        lambda m: f" chapter {NUMBER_WORDS[m.group(1).lower()]} ",
+        out,
+    )
     out = re.sub(
         r"(?i)(?<![a-z0-9])ch(?:apter)?[\s_-]*(\d+)([a-z]?)(?![a-z0-9])",
         lambda m: f" chapter {m.group(1)} {m.group(2)} ",
+        out,
+    )
+    out = re.sub(
+        rf"(?i)(?<![a-z0-9])week[\s_-]*({word_pattern})(?![a-z0-9])",
+        lambda m: f" week {NUMBER_WORDS[m.group(1).lower()]} ",
         out,
     )
     out = re.sub(
@@ -27,7 +47,6 @@ def _normalize_structure(text: str) -> str:
 
 
 def _structural_scope_pattern(scope: str | None) -> re.Pattern[str] | None:
-    """Return an exact structural matcher for focuses like chapter 1 or week 3."""
     normalized = _normalize_structure(scope or "").lower()
     chapter = re.search(r"\bchapter\s+(\d+)\b", normalized)
     if chapter:
@@ -42,6 +61,8 @@ def _row_structure_text(row: dict[str, Any]) -> str:
     return _normalize_structure(
         "\n".join(
             part for part in (
+                str(row.get("structural_scope") or ""),
+                str(row.get("relative_path") or ""),
                 str(row.get("filename") or ""),
                 str(row.get("heading") or ""),
             ) if part
@@ -50,11 +71,7 @@ def _row_structure_text(row: dict[str, Any]) -> str:
 
 
 class Retriever:
-    """Small-course retrieval that needs no second model server.
-
-    Hermes owns the LLM. Retrieval stays local and deterministic with TF-IDF so a
-    fresh Hermes-only Mac does not also need Ollama or an embedding service.
-    """
+    """Local deterministic retrieval with explicit course-structure scoping."""
 
     def __init__(self, db: StudyDB, llm_or_top_k=None, top_k: int = 6):
         self.db = db
@@ -76,22 +93,32 @@ class Retriever:
         if not rows:
             return []
 
-        # A structural focus such as "chapter 1" is a boundary, not merely a
-        # ranking hint. This prevents CH9 material from leaking into a CH1 study
-        # session just because its prose happens to match generic query terms.
         scope_pattern = _structural_scope_pattern(scope)
         if scope_pattern is not None:
-            scoped = [r for r in rows if scope_pattern.search(_row_structure_text(r))]
-            if scoped:
-                rows = scoped
-            elif strict_scope:
-                return []
+            # Prefer explicit metadata learned from the user's folder tree. Only
+            # fall back to filename/heading inference for old, not-yet-organized
+            # records so existing installations remain usable during migration.
+            explicitly_scoped = [
+                r for r in rows
+                if r.get("structural_scope")
+                and scope_pattern.search(_normalize_structure(str(r.get("structural_scope"))))
+            ]
+            if explicitly_scoped:
+                rows = explicitly_scoped
+            else:
+                inferred = [r for r in rows if scope_pattern.search(_row_structure_text(r))]
+                if inferred:
+                    rows = inferred
+                elif strict_scope:
+                    return []
 
         k = top_k or self.top_k
         corpus = [
             _normalize_structure(
                 "\n".join(
                     part for part in (
+                        str(r.get("structural_scope") or ""),
+                        str(r.get("relative_path") or ""),
                         str(r.get("filename") or ""),
                         str(r.get("heading") or ""),
                         str(r.get("source_type") or ""),
@@ -126,7 +153,9 @@ def context_block(rows: list[dict[str, Any]]) -> str:
     blocks = []
     for i, r in enumerate(rows, 1):
         page = f", page {r['page']}" if r.get("page") else ""
+        scope = f"; scope={r['structural_scope']}" if r.get("structural_scope") else ""
+        path = f"; path={r['relative_path']}" if r.get("relative_path") else ""
         blocks.append(
-            f"[SOURCE {i}: {r['filename']}{page}; type={r['source_type']}; authority={r['authority']}]\n{r['text']}"
+            f"[SOURCE {i}: {r['filename']}{page}; type={r['source_type']}; authority={r['authority']}{scope}{path}]\n{r['text']}"
         )
     return "\n\n".join(blocks)
