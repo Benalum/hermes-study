@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-study"
+version = "0.1.0"
+description = "Voice-first local-LLM study assistant with course RAG and a browser UI"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "pydantic>=2.8,<3",
+  "pydantic-settings>=2.4,<3",
+  "python-multipart>=0.0.9",
+  "httpx>=0.27,<1",
+  "pypdf>=5,<6",
+  "python-docx>=1.1,<2",
+  "numpy>=1.26,<3",
+  "scikit-learn>=1.5,<2",
+  "jinja2>=3.1,<4",
+]
+
+[project.optional-dependencies]
+voice = [
+  "faster-whisper>=1.1,<2",
+  "soundfile>=0.12,<1",
+]
+speaker = [
+  "speechbrain>=1.0,<2",
+  "torch>=2.2,<3",
+  "torchaudio>=2.2,<3",
+]
+test = [
+  "pytest>=8.2,<9",
+  "pytest-asyncio>=0.23,<1",
+]
+
+[project.scripts]
+hermes-study = "hermes_study.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hermes_study"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
