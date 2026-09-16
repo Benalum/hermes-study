@@ -9,6 +9,25 @@ from .llm import HermesClient
 from .retrieval import Retriever, context_block
 
 
+NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20,
+}
+
+SOURCE_LABELS = {
+    "professor": "Professor",
+    "syllabus": "Syllabus",
+    "homework": "Homework",
+    "textbook": "Textbook",
+    "notes": "Notes",
+    "reference": "Reference",
+    "other": "Course Material",
+}
+
+
 class Tutor:
     def __init__(self, db: StudyDB, llm: HermesClient, retriever: Retriever):
         self.db = db
@@ -35,7 +54,10 @@ class Tutor:
         if not sources:
             if scope:
                 return {
-                    "answer": f"I could not find readable course material explicitly labeled for {scope}.",
+                    "answer": (
+                        f"I could not find readable course material organized under {scope}. "
+                        "If the files are already in a chapter folder, run the course organizer once so I can learn that folder structure."
+                    ),
                     "sources": [],
                 }
             return {
@@ -46,7 +68,7 @@ class Tutor:
         if scope:
             prompt += (
                 f"\nThe learner explicitly requested {scope}. Treat that as a HARD BOUNDARY. "
-                "Use only the supplied sources from that scope and do not drift into other chapters or weeks."
+                "The source folder/scope metadata is authoritative. Use only the supplied sources from that scope and do not drift into other chapters or weeks."
             )
         if lecture:
             prompt += (
@@ -75,7 +97,8 @@ class Tutor:
 
     async def start_session(self, course_id: int, mode: str = "adaptive", focus: str | None = None) -> dict[str, Any]:
         course = self._course(course_id)
-        explicit_focus = (focus or "").strip()
+        raw_focus = (focus or "").strip()
+        explicit_focus = _canonical_scope(raw_focus) or raw_focus
         if explicit_focus:
             self.db.set_course_setting(course_id, "current_focus", explicit_focus)
         current_focus = explicit_focus or self.db.get_course_setting(course_id, "current_focus")
@@ -83,19 +106,15 @@ class Tutor:
         mastery = self.db.mastery_for_course(course_id)
         if current_focus:
             weak = "Use only weakness evidence supported by the currently scoped sources. Ignore stored weak topics from other chapters."
-            retrieval_query = (
-                f"{current_focus} {current_focus} learning objectives concepts examples homework professor material"
-            )
+            retrieval_query = f"{current_focus} {current_focus} learning objectives concepts examples homework professor material"
             focus_instruction = (
                 f"\nCURRENT COURSE FOCUS: {current_focus}. This is a HARD BOUNDARY for the session. "
-                "Every question must be supported by the supplied sources from this focus. Do not use or mention topics from later chapters, "
-                "even if they appear in prior mastery data."
+                "Every question must be supported by the supplied sources from this focus. Treat source folder/scope metadata as authoritative. "
+                "Do not use or mention topics from later chapters, even if they appear in prior mastery data."
             )
         else:
             weak = ", ".join(f"{m['topic']} ({m['score']:.0%})" for m in mastery[:5]) or "No prior mastery data yet"
-            retrieval_query = (
-                "beginning introductory first chapter chapter 1 week 1 foundational learning objectives professor material"
-            )
+            retrieval_query = "beginning introductory first chapter chapter 1 week 1 foundational learning objectives professor material"
             focus_instruction = (
                 "\nNo current course focus has been set yet. Start with the earliest/foundational material in the course "
                 "rather than choosing an arbitrary later-semester concept."
@@ -111,8 +130,8 @@ class Tutor:
         if not sources:
             if current_focus:
                 raise ValueError(
-                    f"I could not find readable material explicitly labeled for '{current_focus}'. "
-                    "Check the course filenames or choose a different focus."
+                    f"I could not find readable material organized under '{current_focus}'. "
+                    "Run the course folder organizer or choose a different focus."
                 )
             raise ValueError("Upload at least one readable course document before starting a study session.")
 
@@ -238,7 +257,7 @@ class Tutor:
             if lower.startswith(alias_lower + " "):
                 focus = raw[len(alias):].strip(" :-")
                 focus = re.sub(r"^(?:on|for)\s+", "", focus, flags=re.I).strip()
-                return course, focus
+                return course, _canonical_scope(focus) or focus
 
         return self.db.find_course(raw), ""
 
@@ -258,6 +277,9 @@ class Tutor:
             item = {
                 "document_id": document_id,
                 "filename": filename,
+                "display_name": _display_source_name(r),
+                "relative_path": r.get("relative_path") or "",
+                "scope": r.get("structural_scope") or "",
                 "page": page,
                 "type": r["source_type"],
                 "score": round(float(r["score"]), 4),
@@ -271,7 +293,8 @@ class Tutor:
     def _grounded_system(course: dict[str, Any], sources: list[dict[str, Any]]) -> str:
         return (
             f"You are Hermes Study, tutoring {course['name']} ({course.get('code') or 'no code'}). "
-            "Ground course-specific claims in the supplied sources. Source authority order is professor > syllabus > homework > textbook > notes > reference. "
+            "Ground course-specific claims in the supplied sources. The source folder/scope metadata is the authoritative chapter/week assignment. "
+            "Source authority order is professor > syllabus > homework > textbook > notes > reference. "
             "If the sources disagree, explicitly prefer the higher-authority class source and mention the conflict. "
             "Be concise enough for text-to-speech, but teach reasoning. Never invent deadlines, professor rules, formulas, or assigned material. "
             "When useful, cite sources in spoken-friendly form such as 'According to syllabus page 3'.\n\n"
@@ -279,14 +302,43 @@ class Tutor:
         )
 
 
-def _explicit_scope(text: str) -> str | None:
-    chapter = re.search(r"\bch(?:apter)?\s*[-_ ]*(\d+)\b", text, flags=re.I)
+def _number_value(token: str) -> int | None:
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    return NUMBER_WORDS.get(token)
+
+
+def _canonical_scope(text: str) -> str | None:
+    word_pattern = "|".join(NUMBER_WORDS)
+    chapter = re.search(rf"\bch(?:apter)?\s*[-_ ]*({word_pattern}|\d+)\b", text, flags=re.I)
     if chapter:
-        return f"chapter {chapter.group(1)}"
-    week = re.search(r"\bweek\s*[-_ ]*(\d+)\b", text, flags=re.I)
+        number = _number_value(chapter.group(1))
+        if number is not None:
+            return f"chapter {number}"
+    week = re.search(rf"\bweek\s*[-_ ]*({word_pattern}|\d+)\b", text, flags=re.I)
     if week:
-        return f"week {week.group(1)}"
+        number = _number_value(week.group(1))
+        if number is not None:
+            return f"week {number}"
     return None
+
+
+def _explicit_scope(text: str) -> str | None:
+    return _canonical_scope(text)
+
+
+def _display_source_name(row: dict[str, Any]) -> str:
+    filename = str(row.get("filename") or "Course material")
+    stem = re.sub(r"\.[^.]+$", "", filename)
+    stem = re.sub(r"(?i)\bchem\s*1215\b", "", stem)
+    stem = re.sub(r"(?i)\bch(?:apter)?\s*\d+[a-z]?\b", "", stem)
+    stem = re.sub(r"(?i)\bopenstax\b", "", stem)
+    stem = re.sub(r"[_-]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip(" .-_") or filename
+    scope = str(row.get("structural_scope") or "").title() or "Course"
+    source = SOURCE_LABELS.get(str(row.get("source_type") or "other"), "Course Material")
+    return f"{scope} · {source} · {stem}"
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
